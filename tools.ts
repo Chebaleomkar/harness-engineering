@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { setPlan } from "./plan.ts";
 import { sandboxCommand } from "./sandbox.ts";
+import { runSubagent } from "./subagent.ts";
 import { shape } from "./shape.ts";
 import { getSkill } from "./skills.ts";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -129,14 +130,24 @@ const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
       `   replaces the whole plan. Put findings in note, because old tool results get cleared but the plan stays.`,
     run: (a) => setPlan(a.items),
   },
+  delegate: {
+    usage:
+      `{"tool":"delegate","task":"<complete instructions>"}   hands a research task to a fresh read-only agent. ` +
+      `It knows nothing about this conversation, so put everything it needs in the task. ` +
+      `It returns only a short answer. Use it when the work means reading many files.`,
+    run: (a) => runSubagent(String(a.task ?? "")),
+  },
   load_skill: {
     usage: `{"tool":"load_skill","name":"<skill name>"}   loads the full instructions for a skill from the Skills list`,
     run: (a) => getSkill(a.name),
   },
 };
 
-export function toolUsage(): string {
-  return Object.values(tools).map((t) => t.usage).join("\n");
+export function toolUsage(names?: string[]): string {
+  return Object.entries(tools)
+    .filter(([name]) => !names || names.includes(name))
+    .map(([, t]) => t.usage)
+    .join("\n");
 }
 
 export function runTool(req: Args): string {

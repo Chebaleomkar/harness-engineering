@@ -8,7 +8,8 @@ const allow: Verdict = { decision: "allow" };
 const ask: Verdict = { decision: "ask" };
 const deny = (reason: string): Verdict => ({ decision: "deny", reason });
 
-const READ_ONLY = new Set(["ls", "grep", "read", "todo", "load_skill"]);
+// delegate is safe to allow: the subagent it starts is read-only, and each of its own calls is checked too.
+const READ_ONLY = new Set(["ls", "grep", "read", "todo", "load_skill", "delegate"]);
 const PATH_TOOLS = new Set(["ls", "grep", "read", "edit", "write"]);
 
 // Commands that only look at things. Still refused if they chain or redirect (see CHAINING).

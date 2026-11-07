@@ -10,6 +10,12 @@ export function resetPlan(): void {
   plan = [];
 }
 
+// A subagent starts with an empty plan. These let its parent get its own plan back afterwards.
+export const snapshotPlan = (): Item[] => plan.map((i) => ({ ...i }));
+export function restorePlan(saved: Item[]): void {
+  plan = saved;
+}
+
 // Replaces the whole plan. Returns an error string if the list is malformed.
 export function setPlan(items: unknown): string {
   if (!Array.isArray(items) || items.length === 0) return SHAPE;

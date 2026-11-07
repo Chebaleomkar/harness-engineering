@@ -20,19 +20,24 @@ export function parse(text: string): any | null {
 
 const MAX_STOP_BLOCKS = 3;
 
+// Set when this agent was started by another agent: where its log goes, and the only tools it may use.
+export type SubConfig = { log: (message: string) => void; tools: string[] };
+
 export function agent(
   question: string,
   maxTurns = 10,
   system = buildSystemPrompt(),
   budgetChars = 400_000,
+  sub?: SubConfig,
 ): string {
+  const log = sub?.log ?? console.log;
   resetPlan();
   const transcript: string[] = [`User: ${question}`];
   let stopBlocks = 0;
 
   for (let turn = 1; turn <= maxTurns; turn++) {
     const cleared = compact(system, transcript, budgetChars);
-    if (cleared) console.log(`[context] over budget, cleared ${cleared} old tool result(s)`);
+    if (cleared) log(`[context] over budget, cleared ${cleared} old tool result(s)`);
     // Results were just thrown away and nothing was saved. Tell the model now, while it can still act on it.
     if (cleared && !renderPlan()) {
       transcript.push(
@@ -41,22 +46,22 @@ export function agent(
       );
     }
     const used = contextSize(system, transcript);
-    console.log(`[context] ${used} chars (~${estimateTokens(used)} tokens), budget ${budgetChars}`);
+    log(`[context] ${used} chars (~${estimateTokens(used)} tokens), budget ${budgetChars}`);
 
     // The plan is rebuilt from the store on every call and put last, where it is read most closely.
     const plan = renderPlan();
-    if (plan) console.log(`[plan]\n${plan}`);
+    if (plan) log(`[plan]\n${plan}`);
     const prompt = transcript.join("\n\n") + (plan ? `\n\nCurrent plan:\n${plan}` : "");
 
     const reply = callModel(prompt, system);
-    console.log(`[turn ${turn}] model: ${reply}`);
+    log(`[turn ${turn}] model: ${reply}`);
 
     const msg = parse(reply);
     // Record only the JSON we acted on. Anything else in the reply, like an invented tool result, is dropped.
     transcript.push(`Assistant: ${msg ? JSON.stringify(msg) : reply}`);
     if (!msg) {
       const err = "error: your reply was not a valid JSON object. Reply with only one JSON object.";
-      console.log(`[turn ${turn}] ${err}\n`);
+      log(`[turn ${turn}] ${err}\n`);
       transcript.push(`Tool result:\n${err}`);
       continue;
     }
@@ -68,7 +73,7 @@ export function agent(
       }
       if (hold) {
         stopBlocks++;
-        console.log(`[hook] Stop blocked (${stopBlocks}/${MAX_STOP_BLOCKS}): ${hold.split("\n")[0]}`);
+        log(`[hook] Stop blocked (${stopBlocks}/${MAX_STOP_BLOCKS}): ${hold.split("\n")[0]}`);
         transcript.push(`Harness note: a hook says you are not done yet. ${hold}`);
         continue;
       }
@@ -76,13 +81,14 @@ export function agent(
     }
 
     // Pre hooks run first, then permissions, then the tool, then Post hooks give feedback.
-    const blocked = runHooks("PreToolUse", { tool: msg.tool, input: msg });
-    let result = blocked ? `denied by hook: ${blocked}` : (authorize(msg) ?? runTool(msg));
-    if (!blocked) {
+    const outOfScope = sub && !sub.tools.includes(msg.tool) ? `denied: this agent can only use ${sub.tools.join(", ")}` : null;
+    const blocked = outOfScope ? null : runHooks("PreToolUse", { tool: msg.tool, input: msg });
+    let result = outOfScope ?? (blocked ? `denied by hook: ${blocked}` : (authorize(msg) ?? runTool(msg)));
+    if (!blocked && !outOfScope) {
       const feedback = runHooks("PostToolUse", { tool: msg.tool, input: msg, result });
       if (feedback) result += `\nhook feedback: ${feedback}`;
     }
-    console.log(`[turn ${turn}] tool result:\n${result}\n`);
+    log(`[turn ${turn}] tool result:\n${result}\n`);
     transcript.push(`Tool result:\n${result}`);
   }
   return "gave up: too many turns";

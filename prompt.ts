@@ -3,7 +3,7 @@ import { skillIndex } from "./skills.ts";
 import { toolUsage } from "./tools.ts";
 
 // The system prompt is assembled from parts so each one has a single job.
-export function buildSystemPrompt(extraRules = ""): string {
+export function buildSystemPrompt(extraRules = "", toolNames?: string[]): string {
   const identity = "You are a coding agent working inside the user's project folder.";
 
   const format = `## Reply format
@@ -11,7 +11,7 @@ Reply with ONLY one JSON object, nothing else.
 Never write a tool result yourself. The harness runs the tool and sends you the result.`;
 
   const tools = `## Tools
-${toolUsage()}
+${toolUsage(toolNames)}
 To finish: {"answer":"<your final answer>"}`;
 
   const rules = `## Rules
