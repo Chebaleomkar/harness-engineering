@@ -1,5 +1,6 @@
 import { callModel } from "./model.ts";
 import { buildSystemPrompt } from "./prompt.ts";
+import { authorize } from "./permissions.ts";
 import { renderPlan, resetPlan } from "./plan.ts";
 import { runTool } from "./tools.ts";
 import { compact, contextSize, estimateTokens } from "./window.ts";
@@ -57,7 +58,7 @@ export function agent(
     }
     if (msg.answer !== undefined) return msg.answer;
 
-    const result = runTool(msg);
+    const result = authorize(msg) ?? runTool(msg);
     console.log(`[turn ${turn}] tool result:\n${result}\n`);
     transcript.push(`Tool result:\n${result}`);
   }
