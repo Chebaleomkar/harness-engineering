@@ -86,13 +86,41 @@ function bash(a: Args): string {
   return `exit code: ${r.status}\n${shape((r.stdout + r.stderr).trim())}`;
 }
 
-const tools: Record<string, (a: Args) => string> = { ls, read, grep, edit, write, bash };
+// Each tool carries its own usage line. The system prompt is built from these,
+// so the prompt can never list a tool that does not exist or miss one that does.
+const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
+  ls: { usage: `{"tool":"ls","path":"<directory>"}`, run: ls },
+  grep: {
+    usage: `{"tool":"grep","pattern":"<regex>","path":"<file or directory, optional>"}   finds matching lines as file:line:text`,
+    run: grep,
+  },
+  read: {
+    usage: `{"tool":"read","path":"<file>","start":<first line, optional>,"limit":<line count, optional>}`,
+    run: read,
+  },
+  edit: {
+    usage: `{"tool":"edit","path":"<file>","old":"<exact existing text>","new":"<replacement>"}   old must match exactly once`,
+    run: edit,
+  },
+  write: {
+    usage: `{"tool":"write","path":"<new file>","content":"<text>"}   only for files that do not exist yet`,
+    run: write,
+  },
+  bash: {
+    usage: `{"tool":"bash","command":"<shell command>"}   returns exit code (0 = success) and output`,
+    run: bash,
+  },
+};
+
+export function toolUsage(): string {
+  return Object.values(tools).map((t) => t.usage).join("\n");
+}
 
 export function runTool(req: Args): string {
-  const fn = tools[req.tool];
-  if (!fn) return `error: unknown tool ${req.tool}. Available: ${Object.keys(tools).join(", ")}`;
+  const tool = tools[req.tool];
+  if (!tool) return `error: unknown tool ${req.tool}. Available: ${Object.keys(tools).join(", ")}`;
   try {
-    return fn(req);
+    return tool.run(req);
   } catch (e) {
     return `error: ${(e as Error).message}`;
   }

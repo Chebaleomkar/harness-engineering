@@ -1,16 +1,6 @@
 import { callModel } from "./model.ts";
+import { buildSystemPrompt } from "./prompt.ts";
 import { runTool } from "./tools.ts";
-
-const SYSTEM = `You are an agent. Reply with ONLY one JSON object, nothing else.
-To use a tool, reply with one of:
-{"tool":"ls","path":"<directory>"}
-{"tool":"grep","pattern":"<regex>","path":"<directory, optional>"}   finds matching lines as file:line:text
-{"tool":"read","path":"<file>","start":<first line, optional>,"limit":<line count, optional>}
-{"tool":"edit","path":"<file>","old":"<exact existing text>","new":"<replacement>"}   old must match exactly once
-{"tool":"write","path":"<new file>","content":"<text>"}   only for files that do not exist yet
-{"tool":"bash","command":"<shell command>"}   runs in the project folder, returns exit code (0 = success) and output
-To finish: {"answer":"<your final answer>"}
-Search with grep first, then read the exact file you need. Read a file before editing it. After a tool call you see its result.`;
 
 // Returns the first valid JSON object in the text, or null if there is none.
 export function parse(text: string): any | null {
@@ -24,11 +14,11 @@ export function parse(text: string): any | null {
   return null;
 }
 
-export function agent(question: string, maxTurns = 10): string {
+export function agent(question: string, maxTurns = 10, system = buildSystemPrompt()): string {
   const transcript: string[] = [`User: ${question}`];
 
   for (let turn = 1; turn <= maxTurns; turn++) {
-    const reply = callModel(transcript.join("\n\n"), SYSTEM);
+    const reply = callModel(transcript.join("\n\n"), system);
     console.log(`[turn ${turn}] model: ${reply}`);
 
     const msg = parse(reply);
