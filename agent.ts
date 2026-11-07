@@ -1,5 +1,6 @@
 import { callModel } from "./model.ts";
 import { buildSystemPrompt } from "./prompt.ts";
+import { runHooks } from "./hooks.ts";
 import { authorize } from "./permissions.ts";
 import { renderPlan, resetPlan } from "./plan.ts";
 import { runTool } from "./tools.ts";
@@ -17,6 +18,8 @@ export function parse(text: string): any | null {
   return null;
 }
 
+const MAX_STOP_BLOCKS = 2;
+
 export function agent(
   question: string,
   maxTurns = 10,
@@ -25,6 +28,7 @@ export function agent(
 ): string {
   resetPlan();
   const transcript: string[] = [`User: ${question}`];
+  let stopBlocks = 0;
 
   for (let turn = 1; turn <= maxTurns; turn++) {
     const cleared = compact(system, transcript, budgetChars);
@@ -56,9 +60,25 @@ export function agent(
       transcript.push(`Tool result:\n${err}`);
       continue;
     }
-    if (msg.answer !== undefined) return msg.answer;
+    if (msg.answer !== undefined) {
+      // A Stop hook can send the model back to work. Capped so a hook cannot loop forever.
+      const hold = runHooks("Stop", { answer: msg.answer });
+      if (hold && stopBlocks < MAX_STOP_BLOCKS) {
+        stopBlocks++;
+        console.log(`[hook] Stop blocked: ${hold}`);
+        transcript.push(`Harness note: a hook says you are not done yet. ${hold}`);
+        continue;
+      }
+      return msg.answer;
+    }
 
-    const result = authorize(msg) ?? runTool(msg);
+    // Pre hooks run first, then permissions, then the tool, then Post hooks give feedback.
+    const blocked = runHooks("PreToolUse", { tool: msg.tool, input: msg });
+    let result = blocked ? `denied by hook: ${blocked}` : (authorize(msg) ?? runTool(msg));
+    if (!blocked) {
+      const feedback = runHooks("PostToolUse", { tool: msg.tool, input: msg, result });
+      if (feedback) result += `\nhook feedback: ${feedback}`;
+    }
     console.log(`[turn ${turn}] tool result:\n${result}\n`);
     transcript.push(`Tool result:\n${result}`);
   }
