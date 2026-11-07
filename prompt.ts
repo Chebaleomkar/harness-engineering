@@ -1,4 +1,5 @@
 import { loadProjectFiles } from "./context.ts";
+import { skillIndex } from "./skills.ts";
 import { toolUsage } from "./tools.ts";
 
 // The system prompt is assembled from parts so each one has a single job.
@@ -25,10 +26,15 @@ To finish: {"answer":"<your final answer>"}`;
       files.map((f) => `### ${f.path}\n${f.text.trim()}`).join("\n\n")
     : "";
 
+  const index = skillIndex();
+  const skills = index
+    ? `## Skills\nWhen a task matches a skill below, call load_skill first and follow it exactly. Do not guess its contents.\n${index}`
+    : "";
+
   const environment = `## Environment
 Working directory: ${process.cwd()}
 Platform: ${process.platform}
 Date: ${new Date().toISOString().slice(0, 10)}`;
 
-  return [identity, format, tools, rules, project, environment, extraRules].filter(Boolean).join("\n\n");
+  return [identity, format, tools, rules, project, skills, environment, extraRules].filter(Boolean).join("\n\n");
 }

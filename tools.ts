@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { shape } from "./shape.ts";
+import { getSkill } from "./skills.ts";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -109,6 +110,10 @@ const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
   bash: {
     usage: `{"tool":"bash","command":"<shell command>"}   returns exit code (0 = success) and output`,
     run: bash,
+  },
+  load_skill: {
+    usage: `{"tool":"load_skill","name":"<skill name>"}   loads the full instructions for a skill from the Skills list`,
+    run: (a) => getSkill(a.name),
   },
 };
 
