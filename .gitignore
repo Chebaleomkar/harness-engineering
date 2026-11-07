@@ -2,3 +2,4 @@
 node_modules
 .harness-memory
 .harness-traces
+.harness-results
