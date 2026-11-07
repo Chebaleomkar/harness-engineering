@@ -1,0 +1,101 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+type Args = Record<string, any>;
+
+const SKIP = new Set(["node_modules", ".git"]);
+const MAX_MATCHES = 50;
+const MAX_LINES = 200;
+
+function ls(a: Args): string {
+  return readdirSync(a.path ?? ".").join("\n");
+}
+
+// Returns a slice of a file with line numbers, so the model can cite and re-read exact spots.
+function read(a: Args): string {
+  const lines = readFileSync(a.path, "utf8").split("\n");
+  const start = Math.max(1, a.start ?? 1);
+  const limit = Math.min(a.limit ?? MAX_LINES, MAX_LINES);
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const out = slice.map((l, i) => `${start + i}\t${l}`).join("\n");
+  const more = start - 1 + limit < lines.length ? `\n... ${lines.length} lines total, pass start to read more` : "";
+  return out + more;
+}
+
+function* walk(dir: string): Generator<string> {
+  if (!statSync(dir).isDirectory()) {
+    yield dir;
+    return;
+  }
+  for (const name of readdirSync(dir)) {
+    if (SKIP.has(name)) continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) yield* walk(p);
+    else yield p;
+  }
+}
+
+// Finds lines matching a regex across a directory tree.
+function grep(a: Args): string {
+  const re = new RegExp(a.pattern);
+  const hits: string[] = [];
+  for (const file of walk(a.path ?? ".")) {
+    let text: string;
+    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i])) hits.push(`${file}:${i + 1}:${lines[i]}`);
+      if (hits.length >= MAX_MATCHES) return hits.join("\n") + `\n... stopped at ${MAX_MATCHES} matches`;
+    }
+  }
+  return hits.length ? hits.join("\n") : "no matches";
+}
+
+// Replaces one exact piece of text. Refuses unless it matches exactly once.
+function edit(a: Args): string {
+  const text = readFileSync(a.path, "utf8");
+  const count = text.split(a.old).length - 1;
+  if (count === 0) return `error: old text not found in ${a.path}. Read the file again and copy the text exactly.`;
+  if (count > 1) return `error: old text appears ${count} times in ${a.path}. Include more surrounding text so it matches once.`;
+  writeFileSync(a.path, text.replace(a.old, () => a.new));
+  return `edited ${a.path}`;
+}
+
+// Creates a new file. Refuses to overwrite so a full rewrite can't happen by accident.
+function write(a: Args): string {
+  if (existsSync(a.path)) return `error: ${a.path} already exists. Use edit to change it.`;
+  writeFileSync(a.path, a.content);
+  return `created ${a.path}`;
+}
+
+const TIMEOUT_MS = 10_000;
+const MAX_OUTPUT = 10_000;
+
+// Runs a shell command. The harness owns the timeout and output cap, not the model.
+function bash(a: Args): string {
+  const r = spawnSync("bash", ["-c", a.command], {
+    encoding: "utf8",
+    timeout: TIMEOUT_MS,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (r.error && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
+    return `error: command timed out after ${TIMEOUT_MS / 1000}s and was killed. Do not run commands that wait or never exit.`;
+  }
+  if (r.error) return `error: ${r.error.message}`;
+  let out = (r.stdout + r.stderr).trim();
+  if (out.length > MAX_OUTPUT) out = out.slice(0, MAX_OUTPUT) + `\n... output cut at ${MAX_OUTPUT} characters`;
+  return `exit code: ${r.status}\n${out}`;
+}
+
+const tools: Record<string, (a: Args) => string> = { ls, read, grep, edit, write, bash };
+
+export function runTool(req: Args): string {
+  const fn = tools[req.tool];
+  if (!fn) return `error: unknown tool ${req.tool}. Available: ${Object.keys(tools).join(", ")}`;
+  try {
+    return fn(req);
+  } catch (e) {
+    return `error: ${(e as Error).message}`;
+  }
+}
