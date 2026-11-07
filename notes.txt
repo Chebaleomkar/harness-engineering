@@ -1,3 +1,4 @@
 groceries
 TODO: call the dentist
 buy oat milk
+- [ ] buy eggs

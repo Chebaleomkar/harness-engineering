@@ -1,3 +1,4 @@
+import { loadProjectFiles } from "./context.ts";
 import { toolUsage } from "./tools.ts";
 
 // The system prompt is assembled from parts so each one has a single job.
@@ -18,10 +19,16 @@ To finish: {"answer":"<your final answer>"}`;
 - Use paths relative to the working directory.
 - If a tool returns an error, read it and change your next call.`;
 
+  const files = loadProjectFiles();
+  const project = files.length
+    ? `## Project instructions (follow these; later files override earlier ones)\n` +
+      files.map((f) => `### ${f.path}\n${f.text.trim()}`).join("\n\n")
+    : "";
+
   const environment = `## Environment
 Working directory: ${process.cwd()}
 Platform: ${process.platform}
 Date: ${new Date().toISOString().slice(0, 10)}`;
 
-  return [identity, format, tools, rules, environment, extraRules].filter(Boolean).join("\n\n");
+  return [identity, format, tools, rules, project, environment, extraRules].filter(Boolean).join("\n\n");
 }
