@@ -1,9 +1,10 @@
-import { callModel } from "./model.ts";
+import { callModelDetailed } from "./model.ts";
 import { buildSystemPrompt } from "./prompt.ts";
 import { runHooks } from "./hooks.ts";
 import { authorize } from "./permissions.ts";
 import { renderPlan, resetPlan } from "./plan.ts";
 import { runTool } from "./tools.ts";
+import { finishTrace, record, startTrace } from "./trace.ts";
 import { compact, contextSize, estimateTokens } from "./window.ts";
 
 // Returns the first valid JSON object in the text, or null if there is none.
@@ -31,6 +32,8 @@ export function agent(
   sub?: SubConfig,
 ): string {
   const log = sub?.log ?? console.log;
+  const who = sub ? "sub" : "main";
+  if (!sub) startTrace(question); // a subagent adds its events to its parent's trace
   resetPlan();
   const transcript: string[] = [`User: ${question}`];
   let stopBlocks = 0;
@@ -53,7 +56,12 @@ export function agent(
     if (plan) log(`[plan]\n${plan}`);
     const prompt = transcript.join("\n\n") + (plan ? `\n\nCurrent plan:\n${plan}` : "");
 
-    const reply = callModel(prompt, system);
+    const call = callModelDetailed(prompt, system);
+    const reply = call.text;
+    record({
+      type: "model_call", agent: who, turn, ms: call.ms,
+      inputTokens: call.inputTokens, outputTokens: call.outputTokens, costUsd: call.costUsd, replyChars: reply.length,
+    });
     log(`[turn ${turn}] model: ${reply}`);
 
     const msg = parse(reply);
@@ -69,18 +77,22 @@ export function agent(
       // A Stop hook can send the model back to work. Capped so a hook cannot loop forever.
       const hold = runHooks("Stop", { answer: msg.answer });
       if (hold && stopBlocks >= MAX_STOP_BLOCKS) {
+        if (!sub) finishTrace("not_verified");
         return `${msg.answer}\n\n[NOT VERIFIED after ${MAX_STOP_BLOCKS} retries: ${hold}]`;
       }
       if (hold) {
         stopBlocks++;
+        record({ type: "stop_block", agent: who, turn });
         log(`[hook] Stop blocked (${stopBlocks}/${MAX_STOP_BLOCKS}): ${hold.split("\n")[0]}`);
         transcript.push(`Harness note: a hook says you are not done yet. ${hold}`);
         continue;
       }
+      if (!sub) finishTrace("answered");
       return msg.answer;
     }
 
     // Pre hooks run first, then permissions, then the tool, then Post hooks give feedback.
+    const toolStart = Date.now();
     const outOfScope = sub && !sub.tools.includes(msg.tool) ? `denied: this agent can only use ${sub.tools.join(", ")}` : null;
     const blocked = outOfScope ? null : runHooks("PreToolUse", { tool: msg.tool, input: msg });
     let result = outOfScope ?? (blocked ? `denied by hook: ${blocked}` : (authorize(msg) ?? runTool(msg)));
@@ -88,8 +100,15 @@ export function agent(
       const feedback = runHooks("PostToolUse", { tool: msg.tool, input: msg, result });
       if (feedback) result += `\nhook feedback: ${feedback}`;
     }
+    const outcome = outOfScope ? "out_of_scope"
+      : blocked ? "blocked_by_hook"
+      : result.startsWith("denied:") ? "denied_by_permissions"
+      : result.startsWith("error:") ? "error"
+      : "ok";
+    record({ type: "tool_call", agent: who, turn, tool: msg.tool, ms: Date.now() - toolStart, resultChars: result.length, outcome });
     log(`[turn ${turn}] tool result:\n${result}\n`);
     transcript.push(`Tool result:\n${result}`);
   }
+  if (!sub) finishTrace("gave_up");
   return "gave up: too many turns";
 }
