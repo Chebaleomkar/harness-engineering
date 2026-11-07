@@ -1,11 +1,18 @@
 import { spawnSync } from "node:child_process";
 import { setPlan } from "./plan.ts";
+import { sandboxCommand } from "./sandbox.ts";
 import { shape } from "./shape.ts";
 import { getSkill } from "./skills.ts";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type Args = Record<string, any>;
+
+// In dry-run mode, edit, write and bash report what they would do and change nothing.
+let dryRun = false;
+export function setDryRun(on: boolean): void {
+  dryRun = on;
+}
 
 const SKIP = new Set(["node_modules", ".git"]);
 const MAX_MATCHES = 50;
@@ -61,6 +68,7 @@ function edit(a: Args): string {
   const count = text.split(a.old).length - 1;
   if (count === 0) return `error: old text not found in ${a.path}. Read the file again and copy the text exactly.`;
   if (count > 1) return `error: old text appears ${count} times in ${a.path}. Include more surrounding text so it matches once.`;
+  if (dryRun) return `dry run: would edit ${a.path}\n- ${a.old}\n+ ${a.new}`;
   writeFileSync(a.path, text.replace(a.old, () => a.new));
   return `edited ${a.path}`;
 }
@@ -68,6 +76,7 @@ function edit(a: Args): string {
 // Creates a new file. Refuses to overwrite so a full rewrite can't happen by accident.
 function write(a: Args): string {
   if (existsSync(a.path)) return `error: ${a.path} already exists. Use edit to change it.`;
+  if (dryRun) return `dry run: would create ${a.path} (${String(a.content).length} chars)`;
   writeFileSync(a.path, a.content);
   return `created ${a.path}`;
 }
@@ -76,7 +85,9 @@ const TIMEOUT_MS = 10_000;
 
 // Runs a shell command. The harness owns the timeout and output cap, not the model.
 function bash(a: Args): string {
-  const r = spawnSync("bash", ["-c", a.command], {
+  if (dryRun) return `dry run: would run: ${a.command}`;
+  const { cmd, args } = sandboxCommand(a.command);
+  const r = spawnSync(cmd, args, {
     encoding: "utf8",
     timeout: TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024,
