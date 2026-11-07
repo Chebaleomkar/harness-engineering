@@ -1,6 +1,7 @@
 import { callModel } from "./model.ts";
 import { buildSystemPrompt } from "./prompt.ts";
 import { runTool } from "./tools.ts";
+import { compact, contextSize, estimateTokens } from "./window.ts";
 
 // Returns the first valid JSON object in the text, or null if there is none.
 export function parse(text: string): any | null {
@@ -14,10 +15,20 @@ export function parse(text: string): any | null {
   return null;
 }
 
-export function agent(question: string, maxTurns = 10, system = buildSystemPrompt()): string {
+export function agent(
+  question: string,
+  maxTurns = 10,
+  system = buildSystemPrompt(),
+  budgetChars = 400_000,
+): string {
   const transcript: string[] = [`User: ${question}`];
 
   for (let turn = 1; turn <= maxTurns; turn++) {
+    const cleared = compact(system, transcript, budgetChars);
+    if (cleared) console.log(`[context] over budget, cleared ${cleared} old tool result(s)`);
+    const used = contextSize(system, transcript);
+    console.log(`[context] ${used} chars (~${estimateTokens(used)} tokens), budget ${budgetChars}`);
+
     const reply = callModel(transcript.join("\n\n"), system);
     console.log(`[turn ${turn}] model: ${reply}`);
 
