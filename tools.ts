@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { setPlan } from "./plan.ts";
 import { shape } from "./shape.ts";
 import { getSkill } from "./skills.ts";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -110,6 +111,12 @@ const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
   bash: {
     usage: `{"tool":"bash","command":"<shell command>"}   returns exit code (0 = success) and output`,
     run: bash,
+  },
+  todo: {
+    usage:
+      `{"tool":"todo","items":[{"text":"<step>","status":"pending|in_progress|done","note":"<what you learned, optional>"}]}` +
+      `   replaces the whole plan. Put findings in note, because old tool results get cleared but the plan stays.`,
+    run: (a) => setPlan(a.items),
   },
   load_skill: {
     usage: `{"tool":"load_skill","name":"<skill name>"}   loads the full instructions for a skill from the Skills list`,

@@ -1,5 +1,6 @@
 import { callModel } from "./model.ts";
 import { buildSystemPrompt } from "./prompt.ts";
+import { renderPlan, resetPlan } from "./plan.ts";
 import { runTool } from "./tools.ts";
 import { compact, contextSize, estimateTokens } from "./window.ts";
 
@@ -21,15 +22,28 @@ export function agent(
   system = buildSystemPrompt(),
   budgetChars = 400_000,
 ): string {
+  resetPlan();
   const transcript: string[] = [`User: ${question}`];
 
   for (let turn = 1; turn <= maxTurns; turn++) {
     const cleared = compact(system, transcript, budgetChars);
     if (cleared) console.log(`[context] over budget, cleared ${cleared} old tool result(s)`);
+    // Results were just thrown away and nothing was saved. Tell the model now, while it can still act on it.
+    if (cleared && !renderPlan()) {
+      transcript.push(
+        "Harness note: old tool results were just cleared to save space, and your plan is empty. " +
+          "Call todo now and write what you learned from the files you read in each note, or you will have to read them again.",
+      );
+    }
     const used = contextSize(system, transcript);
     console.log(`[context] ${used} chars (~${estimateTokens(used)} tokens), budget ${budgetChars}`);
 
-    const reply = callModel(transcript.join("\n\n"), system);
+    // The plan is rebuilt from the store on every call and put last, where it is read most closely.
+    const plan = renderPlan();
+    if (plan) console.log(`[plan]\n${plan}`);
+    const prompt = transcript.join("\n\n") + (plan ? `\n\nCurrent plan:\n${plan}` : "");
+
+    const reply = callModel(prompt, system);
     console.log(`[turn ${turn}] model: ${reply}`);
 
     const msg = parse(reply);

@@ -17,6 +17,7 @@ To finish: {"answer":"<your final answer>"}`;
   const rules = `## Rules
 - Search with grep first, then read the exact file you need.
 - Read a file before editing it.
+- For a task with 3 or more steps, call todo first. Keep it updated as you go, and write what you learn in each note.
 - Use paths relative to the working directory.
 - If a tool returns an error, read it and change your next call.`;
 
