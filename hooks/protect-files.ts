@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 const event = JSON.parse(readFileSync(0, "utf8"));
-const PROTECTED = ["secret.txt", "HARNESS.md", "hooks.json", "hooks/"];
+const PROTECTED = ["secret.txt", "HARNESS.md", "hooks.json", "hooks/", "playground/slug.test.ts"];
 
 const rel = relative(process.cwd(), resolve(process.cwd(), String(event.input?.path ?? "")));
 const hit = PROTECTED.find((p) => rel === p || (p.endsWith("/") && rel.startsWith(p)));

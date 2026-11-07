@@ -18,7 +18,7 @@ export function parse(text: string): any | null {
   return null;
 }
 
-const MAX_STOP_BLOCKS = 2;
+const MAX_STOP_BLOCKS = 3;
 
 export function agent(
   question: string,
@@ -63,9 +63,12 @@ export function agent(
     if (msg.answer !== undefined) {
       // A Stop hook can send the model back to work. Capped so a hook cannot loop forever.
       const hold = runHooks("Stop", { answer: msg.answer });
-      if (hold && stopBlocks < MAX_STOP_BLOCKS) {
+      if (hold && stopBlocks >= MAX_STOP_BLOCKS) {
+        return `${msg.answer}\n\n[NOT VERIFIED after ${MAX_STOP_BLOCKS} retries: ${hold}]`;
+      }
+      if (hold) {
         stopBlocks++;
-        console.log(`[hook] Stop blocked: ${hold}`);
+        console.log(`[hook] Stop blocked (${stopBlocks}/${MAX_STOP_BLOCKS}): ${hold.split("\n")[0]}`);
         transcript.push(`Harness note: a hook says you are not done yet. ${hold}`);
         continue;
       }

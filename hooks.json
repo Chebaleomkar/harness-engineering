@@ -1,6 +1,7 @@
 {
   "hooks": [
     { "event": "PreToolUse", "matcher": "edit|write", "command": "node hooks/protect-files.ts" },
-    { "event": "PostToolUse", "matcher": ".*", "command": "node hooks/audit.ts" }
+    { "event": "PostToolUse", "matcher": ".*", "command": "node hooks/audit.ts" },
+    { "event": "Stop", "command": "node hooks/verify.ts" }
   ]
 }
