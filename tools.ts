@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { setPlan } from "./plan.ts";
 import { sandboxCommand } from "./sandbox.ts";
+import { forget, recall, remember } from "./memory.ts";
 import { runSubagent } from "./subagent.ts";
 import { shape } from "./shape.ts";
 import { getSkill } from "./skills.ts";
@@ -136,6 +137,20 @@ const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
       `It knows nothing about this conversation, so put everything it needs in the task. ` +
       `It returns only a short answer. Use it when the work means reading many files.`,
     run: (a) => runSubagent(String(a.task ?? "")),
+  },
+  remember: {
+    usage:
+      `{"tool":"remember","name":"<short-name>","description":"<one line: when this matters>","content":"<the fact, under 600 characters>"}` +
+      `   saves a note for future sessions. Reusing a name replaces that note.`,
+    run: remember,
+  },
+  recall: {
+    usage: `{"tool":"recall","name":"<memory name>"}   loads a saved note from the Memory list`,
+    run: recall,
+  },
+  forget: {
+    usage: `{"tool":"forget","name":"<memory name>"}   deletes a saved note that is wrong or no longer true`,
+    run: forget,
   },
   load_skill: {
     usage: `{"tool":"load_skill","name":"<skill name>"}   loads the full instructions for a skill from the Skills list`,

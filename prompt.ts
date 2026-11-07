@@ -1,4 +1,5 @@
 import { loadProjectFiles } from "./context.ts";
+import { memoryIndex } from "./memory.ts";
 import { skillIndex } from "./skills.ts";
 import { toolUsage } from "./tools.ts";
 
@@ -32,10 +33,19 @@ To finish: {"answer":"<your final answer>"}`;
     ? `## Skills\nWhen a task matches a skill below, call load_skill first and follow it exactly. Do not guess its contents.\n${index}`
     : "";
 
+  // Subagents get no memory section, because they cannot call recall.
+  const memory =
+    !toolNames || toolNames.includes("recall")
+      ? `## Memory
+These are notes saved in earlier sessions. They can be out of date, so check them against the code before relying on them. Load one with recall when it looks relevant.
+When the user states a lasting preference, convention or fact that the code does not show, save it with remember. Never save secrets.
+${memoryIndex() || "(none yet)"}`
+      : "";
+
   const environment = `## Environment
 Working directory: ${process.cwd()}
 Platform: ${process.platform}
 Date: ${new Date().toISOString().slice(0, 10)}`;
 
-  return [identity, format, tools, rules, project, skills, environment, extraRules].filter(Boolean).join("\n\n");
+  return [identity, format, tools, rules, project, skills, memory, environment, extraRules].filter(Boolean).join("\n\n");
 }

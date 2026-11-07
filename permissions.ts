@@ -9,7 +9,7 @@ const ask: Verdict = { decision: "ask" };
 const deny = (reason: string): Verdict => ({ decision: "deny", reason });
 
 // delegate is safe to allow: the subagent it starts is read-only, and each of its own calls is checked too.
-const READ_ONLY = new Set(["ls", "grep", "read", "todo", "load_skill", "delegate"]);
+const READ_ONLY = new Set(["ls", "grep", "read", "todo", "load_skill", "delegate", "recall"]);
 const PATH_TOOLS = new Set(["ls", "grep", "read", "edit", "write"]);
 
 // Commands that only look at things. Still refused if they chain or redirect (see CHAINING).
@@ -43,7 +43,8 @@ export function decide(req: Args): Verdict {
   }
 
   if (READ_ONLY.has(tool)) return allow;
-  if (tool === "edit" || tool === "write") return ask;
+  if (tool === "remember") return allow; // the tool validates the name and size, and refuses secrets
+  if (tool === "edit" || tool === "write" || tool === "forget") return ask;
   return deny(`no permission rule for tool ${tool}`);
 }
 

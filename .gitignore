@@ -1,2 +1,3 @@
 .harness-audit.log
 node_modules
+.harness-memory
