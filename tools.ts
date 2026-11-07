@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { shape } from "./shape.ts";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -70,7 +71,6 @@ function write(a: Args): string {
 }
 
 const TIMEOUT_MS = 10_000;
-const MAX_OUTPUT = 10_000;
 
 // Runs a shell command. The harness owns the timeout and output cap, not the model.
 function bash(a: Args): string {
@@ -83,9 +83,7 @@ function bash(a: Args): string {
     return `error: command timed out after ${TIMEOUT_MS / 1000}s and was killed. Do not run commands that wait or never exit.`;
   }
   if (r.error) return `error: ${r.error.message}`;
-  let out = (r.stdout + r.stderr).trim();
-  if (out.length > MAX_OUTPUT) out = out.slice(0, MAX_OUTPUT) + `\n... output cut at ${MAX_OUTPUT} characters`;
-  return `exit code: ${r.status}\n${out}`;
+  return `exit code: ${r.status}\n${shape((r.stdout + r.stderr).trim())}`;
 }
 
 const tools: Record<string, (a: Args) => string> = { ls, read, grep, edit, write, bash };
