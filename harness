@@ -1,0 +1,4 @@
+#!/bin/bash
+# Runs the harness on the folder you are in. Symlink this file onto your PATH to use `harness` anywhere.
+ROOT="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+exec node "$ROOT/harness.ts" "$@"
