@@ -10,10 +10,6 @@ import { join } from "node:path";
 
 type Args = Record<string, any>;
 
-// Experimental behavior is switched on by name, so two versions of the harness can be compared on the same code.
-// Example: HARNESS_FEATURES=edit-replace-all
-const featureOn = (name: string): boolean => (process.env.HARNESS_FEATURES ?? "").split(",").includes(name);
-
 // In dry-run mode, edit, write and bash report what they would do and change nothing.
 let dryRun = false;
 export function setDryRun(on: boolean): void {
@@ -73,11 +69,10 @@ function edit(a: Args): string {
   const text = readFileSync(a.path, "utf8");
   const count = text.split(a.old).length - 1;
   if (count === 0) return `error: old text not found in ${a.path}. Read the file again and copy the text exactly.`;
-  const replaceAll = a.all === true && featureOn("edit-replace-all");
-  if (count > 1 && !replaceAll) return `error: old text appears ${count} times in ${a.path}. Include more surrounding text so it matches once.`;
+  if (count > 1) return `error: old text appears ${count} times in ${a.path}. Include more surrounding text so it matches once.`;
   if (dryRun) return `dry run: would edit ${a.path}\n- ${a.old}\n+ ${a.new}`;
-  writeFileSync(a.path, replaceAll ? text.split(a.old).join(a.new) : text.replace(a.old, () => a.new));
-  return replaceAll ? `edited ${a.path} (${count} replacements)` : `edited ${a.path}`;
+  writeFileSync(a.path, text.replace(a.old, () => a.new));
+  return `edited ${a.path}`;
 }
 
 // Creates a new file. Refuses to overwrite so a full rewrite can't happen by accident.
@@ -108,7 +103,7 @@ function bash(a: Args): string {
 
 // Each tool carries its own usage line. The system prompt is built from these,
 // so the prompt can never list a tool that does not exist or miss one that does.
-const tools: Record<string, { usage: string | (() => string); run: (a: Args) => string }> = {
+const tools: Record<string, { usage: string; run: (a: Args) => string }> = {
   ls: { usage: `{"tool":"ls","path":"<directory>"}`, run: ls },
   grep: {
     usage: `{"tool":"grep","pattern":"<regex>","path":"<file or directory, optional>"}   finds matching lines as file:line:text`,
@@ -119,11 +114,7 @@ const tools: Record<string, { usage: string | (() => string); run: (a: Args) => 
     run: read,
   },
   edit: {
-    usage: () =>
-      featureOn("edit-replace-all")
-        ? `{"tool":"edit","path":"<file>","old":"<exact existing text>","new":"<replacement>","all":<true to replace every match, optional>}` +
-          `   old must match exactly once, unless you pass "all":true`
-        : `{"tool":"edit","path":"<file>","old":"<exact existing text>","new":"<replacement>"}   old must match exactly once`,
+    usage: `{"tool":"edit","path":"<file>","old":"<exact existing text>","new":"<replacement>"}   old must match exactly once`,
     run: edit,
   },
   write: {
@@ -170,7 +161,7 @@ const tools: Record<string, { usage: string | (() => string); run: (a: Args) => 
 export function toolUsage(names?: string[]): string {
   return Object.entries(tools)
     .filter(([name]) => !names || names.includes(name))
-    .map(([, t]) => (typeof t.usage === "function" ? t.usage() : t.usage))
+    .map(([, t]) => t.usage)
     .join("\n");
 }
 
